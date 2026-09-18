@@ -1,3 +1,6 @@
+from streamlit_gsheets import GSheetsConnection
+from datetime import datetime
+
 import streamlit as st
 import pandas as pd
 
@@ -59,3 +62,35 @@ datos = {
 }
 df = pd.DataFrame(datos)
 st.dataframe(df.style.format({"Monto": "${:,.0f}"}), use_container_width=True)
+
+st.markdown("---")
+st.header("💾 Guardar Registro Mensual")
+
+if st.button("Guardar en Google Sheets"):
+    try:
+        # 1. Establecer conexión
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        
+        # 2. Leer los datos históricos (Hoja 1 por defecto)
+        df_existente = conn.read(worksheet="Hoja 1")
+        
+        # 3. Empaquetar los datos del mes actual
+        nuevo_registro = pd.DataFrame([{
+            "Fecha": datetime.now().strftime("%Y-%m-%d"),
+            "Salario": salario,
+            "Gastos Fijos": total_fijos,
+            "Gastos Variables": total_variables,
+            "Abono Fer": abono_fer,
+            "Abono Jheferson": abono_jheferson,
+            "Colchón": colchon
+        }])
+        
+        # 4. Concatenar y limpiar filas vacías
+        df_actualizado = pd.concat([df_existente, nuevo_registro], ignore_index=True).dropna(how="all")
+        
+        # 5. Sobrescribir la base de datos
+        conn.update(worksheet="Hoja 1", data=df_actualizado)
+        
+        st.success("¡Registro guardado exitosamente en la nube!")
+    except Exception as e:
+        st.error(f"Ocurrió un error al guardar: {e}")
