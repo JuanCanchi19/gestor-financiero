@@ -1,96 +1,125 @@
-from streamlit_gsheets import GSheetsConnection
-from datetime import datetime
-
 import streamlit as st
 import pandas as pd
+from streamlit_gsheets import GSheetsConnection
+from datetime import datetime
 
 st.set_page_config(page_title="Gestor Financiero Personal", layout="wide")
 
 st.title("📊 Gestor Financiero Personal")
-st.markdown("Control de liquidez y pago de deudas pre-noviembre")
 
-st.sidebar.header("1. Ingresos Mensuales")
-salario = st.sidebar.number_input("Salario Mensual (Domo)", value=2740238, step=10000)
+# Creamos las dos pestañas de la aplicación
+tab1, tab2 = st.tabs(["📈 Planeación Mensual", "📝 Gastos Diarios"])
 
-def calcular_cuota(principal, tasa_mensual, meses):
-    if tasa_mensual == 0: return principal / meses
-    return principal * (tasa_mensual * (1 + tasa_mensual)**meses) / ((1 + tasa_mensual)**meses - 1)
+# ==========================================
+# PESTAÑA 1: PLANEACIÓN MENSUAL 
+# ==========================================
+with tab1:
+    st.markdown("Control de liquidez y pago de deudas pre-noviembre")
 
-cuota_papa = calcular_cuota(2285510, 0.015, 36)
+    st.sidebar.header("1. Ingresos Mensuales")
+    salario = st.sidebar.number_input("Salario Mensual (Domo)", value=2740238, step=10000)
 
-st.sidebar.header("2. Gastos Fijos")
-mercado = st.sidebar.number_input("Mercado", value=600000, step=10000)
-pasajes = st.sidebar.number_input("Pasajes", value=250000, step=5000)
-udea = st.sidebar.number_input("UdeA", value=50000, step=5000)
-yt = st.sidebar.number_input("Youtube Premium", value=20900, step=1000)
+    def calcular_cuota(principal, tasa_mensual, meses):
+        if tasa_mensual == 0: return principal / meses
+        return principal * (tasa_mensual * (1 + tasa_mensual)**meses) / ((1 + tasa_mensual)**meses - 1)
 
-st.sidebar.header("3. Variables y Obligaciones")
-st.sidebar.info(f"Cuota Papá calculada aut: ${cuota_papa:,.0f}")
-lavadora = st.sidebar.number_input("Lavadora Fer", value=354600, step=10000)
-jean = st.sidebar.number_input("Deuda Jean", value=127252, step=1000)
-regalo = st.sidebar.number_input("Regalo Eli", value=133000, step=5000)
-compartir = st.sidebar.number_input("Compartir 25 Sept", value=50000, step=5000)
+    cuota_papa = calcular_cuota(2285510, 0.015, 36)
 
-total_fijos = mercado + pasajes + udea + yt
-total_variables = cuota_papa + lavadora + jean + regalo + compartir
-gastos_totales_obligatorios = total_fijos + total_variables
-remanente = salario - gastos_totales_obligatorios
+    st.sidebar.header("2. Gastos Fijos")
+    mercado = st.sidebar.number_input("Mercado", value=600000, step=10000)
+    pasajes = st.sidebar.number_input("Pasajes", value=250000, step=5000)
+    udea = st.sidebar.number_input("UdeA", value=50000, step=5000)
+    yt = st.sidebar.number_input("Youtube Premium", value=20900, step=1000)
 
-col1, col2, col3 = st.columns(3)
-col1.metric("Ingresos", f"${salario:,.0f}")
-col2.metric("Obligaciones", f"${gastos_totales_obligatorios:,.0f}")
-col3.metric("Disponible", f"${remanente:,.0f}", delta="Liquidez a asignar")
+    st.sidebar.header("3. Variables y Obligaciones")
+    st.sidebar.info(f"Cuota Papá calculada aut: ${cuota_papa:,.0f}")
+    lavadora = st.sidebar.number_input("Lavadora Fer", value=354600, step=10000)
+    jean = st.sidebar.number_input("Deuda Jean", value=127252, step=1000)
+    regalo = st.sidebar.number_input("Regalo Eli", value=133000, step=5000)
+    compartir = st.sidebar.number_input("Compartir 25 Sept", value=50000, step=5000)
 
-st.markdown("---")
-st.header("⚖️ Distribución del Remanente")
+    total_fijos = mercado + pasajes + udea + yt
+    total_variables = cuota_papa + lavadora + jean + regalo + compartir
+    gastos_totales_obligatorios = total_fijos + total_variables
+    remanente = salario - gastos_totales_obligatorios
 
-col_a, col_b = st.columns(2)
-with col_a:
-    abono_fer = st.slider("Abono Viaje Fer ($1.3M)", 0, int(remanente) if remanente > 0 else 0, 50000, step=10000)
-    abono_jheferson = st.slider("Abono PC Jheferson ($900k)", 0, int(remanente - abono_fer) if (remanente - abono_fer) > 0 else 0, 50000, step=10000)
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Ingresos", f"${salario:,.0f}")
+    col2.metric("Obligaciones", f"${gastos_totales_obligatorios:,.0f}")
+    col3.metric("Disponible", f"${remanente:,.0f}", delta="Liquidez a asignar")
 
-colchon = remanente - abono_fer - abono_jheferson
+    st.markdown("---")
+    st.header("⚖️ Distribución del Remanente")
 
-with col_b:
-    st.success(f"🛡️ Colchón de Seguridad: **${colchon:,.0f}**")
-    st.progress(colchon / remanente if remanente > 0 else 0)
+    col_a, col_b = st.columns(2)
+    with col_a:
+        abono_fer = st.slider("Abono Viaje Fer ($1.3M)", 0, int(remanente) if remanente > 0 else 0, 50000, step=10000)
+        abono_jheferson = st.slider("Abono PC Jheferson ($900k)", 0, int(remanente - abono_fer) if (remanente - abono_fer) > 0 else 0, 50000, step=10000)
 
-st.markdown("### Resumen de Movimientos")
-datos = {
-    "Categoría": ["Ingreso", "Fijos", "Obligaciones Variables", "Abono Fer", "Abono Jheferson", "Colchón Emergencia"],
-    "Monto": [salario, -total_fijos, -total_variables, -abono_fer, -abono_jheferson, colchon]
-}
-df = pd.DataFrame(datos)
-st.dataframe(df.style.format({"Monto": "${:,.0f}"}), use_container_width=True)
+    colchon = remanente - abono_fer - abono_jheferson
 
-st.markdown("---")
-st.header("💾 Guardar Registro Mensual")
+    with col_b:
+        st.success(f"🛡️ Colchón de Seguridad: **${colchon:,.0f}**")
+        st.progress(colchon / remanente if remanente > 0 else 0)
 
-if st.button("Guardar en Google Sheets"):
-    try:
-        # 1. Establecer conexión
-        conn = st.connection("gsheets", type=GSheetsConnection)
+    st.markdown("### Resumen de Movimientos")
+    datos = {
+        "Categoría": ["Ingreso", "Fijos", "Obligaciones Variables", "Abono Fer", "Abono Jheferson", "Colchón Emergencia"],
+        "Monto": [salario, -total_fijos, -total_variables, -abono_fer, -abono_jheferson, colchon]
+    }
+    df = pd.DataFrame(datos)
+    st.dataframe(df.style.format({"Monto": "${:,.0f}"}), use_container_width=True)
+    
+    st.markdown("---")
+    if st.button("Guardar en Google Sheets (Mensual)"):
+        try:
+            conn = st.connection("gsheets", type=GSheetsConnection)
+            df_existente = conn.read(worksheet="Hoja 1")
+            nuevo_registro = pd.DataFrame([{
+                "Fecha": datetime.now().strftime("%Y-%m-%d"),
+                "Salario": salario,
+                "Gastos Fijos": total_fijos,
+                "Gastos Variables": total_variables,
+                "Abono Fer": abono_fer,
+                "Abono Jheferson": abono_jheferson,
+                "Colchón": colchon
+            }])
+            df_actualizado = pd.concat([df_existente, nuevo_registro], ignore_index=True).dropna(how="all")
+            conn.update(worksheet="Hoja 1", data=df_actualizado)
+            st.success("¡Registro mensual guardado exitosamente!")
+        except Exception as e:
+            st.error(f"Error: {e}")
+
+# ==========================================
+# PESTAÑA 2: GASTOS DIARIOS
+# ==========================================
+with tab2:
+    st.markdown("### 🛒 Registrar un Gasto Nuevo")
+    st.write("Agrega aquí tus compras del día a día. Se guardarán en la pestaña 'Gastos Diarios' de tu Google Sheet.")
+    
+    # st.form envuelve los inputs para que no se recargue la app hasta que presiones el botón
+    with st.form("form_gastos", clear_on_submit=True):
+        f_fecha = st.date_input("Fecha de compra", datetime.now())
+        f_concepto = st.text_input("¿Qué compraste? (Ej. Almuerzo UdeA)")
+        f_categoria = st.selectbox("Categoría", ["Mercado/Comida", "Pasajes/Transporte", "Universidad", "Deudas", "Otros"])
+        f_monto = st.number_input("Valor ($)", min_value=0, step=1000)
         
-        # 2. Leer los datos históricos (Hoja 1 por defecto)
-        df_existente = conn.read(worksheet="Hoja 1")
+        submit_btn = st.form_submit_button("Guardar Gasto")
         
-        # 3. Empaquetar los datos del mes actual
-        nuevo_registro = pd.DataFrame([{
-            "Fecha": datetime.now().strftime("%Y-%m-%d"),
-            "Salario": salario,
-            "Gastos Fijos": total_fijos,
-            "Gastos Variables": total_variables,
-            "Abono Fer": abono_fer,
-            "Abono Jheferson": abono_jheferson,
-            "Colchón": colchon
-        }])
-        
-        # 4. Concatenar y limpiar filas vacías
-        df_actualizado = pd.concat([df_existente, nuevo_registro], ignore_index=True).dropna(how="all")
-        
-        # 5. Sobrescribir la base de datos
-        conn.update(worksheet="Hoja 1", data=df_actualizado)
-        
-        st.success("¡Registro guardado exitosamente en la nube!")
-    except Exception as e:
-        st.error(f"Ocurrió un error al guardar: {e}")
+        if submit_btn:
+            try:
+                conn = st.connection("gsheets", type=GSheetsConnection)
+                df_diarios = conn.read(worksheet="Gastos Diarios")
+                
+                nuevo_gasto = pd.DataFrame([{
+                    "Fecha": f_fecha.strftime("%Y-%m-%d"),
+                    "Concepto": f_concepto,
+                    "Categoría": f_categoria,
+                    "Monto": f_monto
+                }])
+                
+                df_actual = pd.concat([df_diarios, nuevo_gasto], ignore_index=True).dropna(how="all")
+                conn.update(worksheet="Gastos Diarios", data=df_actual)
+                st.success(f"✅ Gasto de ${f_monto:,.0f} guardado correctamente.")
+            except Exception as e:
+                st.error(f"Error al guardar: Asegúrate de tener una hoja llamada 'Gastos Diarios' en tu Excel. Detalle: {e}")
