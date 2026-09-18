@@ -1,125 +1,144 @@
 import streamlit as st
 import pandas as pd
-from streamlit_gsheets import GSheetsConnection
-from datetime import datetime
+import plotly.express as px
+import plotly.graph_objects as go
+from streamlit_option_menu import option_menu
+from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Gestor Financiero Personal", layout="wide")
+# Configuración de página para que ocupe toda la pantalla (tipo Dashboard)
+st.set_page_config(page_title="Presupuesto Rápido", layout="wide", initial_sidebar_state="expanded")
 
-st.title("📊 Gestor Financiero Personal")
-
-# Creamos las dos pestañas de la aplicación
-tab1, tab2 = st.tabs(["📈 Planeación Mensual", "📝 Gastos Diarios"])
-
-# ==========================================
-# PESTAÑA 1: PLANEACIÓN MENSUAL 
-# ==========================================
-with tab1:
-    st.markdown("Control de liquidez y pago de deudas pre-noviembre")
-
-    st.sidebar.header("1. Ingresos Mensuales")
-    salario = st.sidebar.number_input("Salario Mensual (Domo)", value=2740238, step=10000)
-
-    def calcular_cuota(principal, tasa_mensual, meses):
-        if tasa_mensual == 0: return principal / meses
-        return principal * (tasa_mensual * (1 + tasa_mensual)**meses) / ((1 + tasa_mensual)**meses - 1)
-
-    cuota_papa = calcular_cuota(2285510, 0.015, 36)
-
-    st.sidebar.header("2. Gastos Fijos")
-    mercado = st.sidebar.number_input("Mercado", value=600000, step=10000)
-    pasajes = st.sidebar.number_input("Pasajes", value=250000, step=5000)
-    udea = st.sidebar.number_input("UdeA", value=50000, step=5000)
-    yt = st.sidebar.number_input("Youtube Premium", value=20900, step=1000)
-
-    st.sidebar.header("3. Variables y Obligaciones")
-    st.sidebar.info(f"Cuota Papá calculada aut: ${cuota_papa:,.0f}")
-    lavadora = st.sidebar.number_input("Lavadora Fer", value=354600, step=10000)
-    jean = st.sidebar.number_input("Deuda Jean", value=127252, step=1000)
-    regalo = st.sidebar.number_input("Regalo Eli", value=133000, step=5000)
-    compartir = st.sidebar.number_input("Compartir 25 Sept", value=50000, step=5000)
-
-    total_fijos = mercado + pasajes + udea + yt
-    total_variables = cuota_papa + lavadora + jean + regalo + compartir
-    gastos_totales_obligatorios = total_fijos + total_variables
-    remanente = salario - gastos_totales_obligatorios
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Ingresos", f"${salario:,.0f}")
-    col2.metric("Obligaciones", f"${gastos_totales_obligatorios:,.0f}")
-    col3.metric("Disponible", f"${remanente:,.0f}", delta="Liquidez a asignar")
-
-    st.markdown("---")
-    st.header("⚖️ Distribución del Remanente")
-
-    col_a, col_b = st.columns(2)
-    with col_a:
-        abono_fer = st.slider("Abono Viaje Fer ($1.3M)", 0, int(remanente) if remanente > 0 else 0, 50000, step=10000)
-        abono_jheferson = st.slider("Abono PC Jheferson ($900k)", 0, int(remanente - abono_fer) if (remanente - abono_fer) > 0 else 0, 50000, step=10000)
-
-    colchon = remanente - abono_fer - abono_jheferson
-
-    with col_b:
-        st.success(f"🛡️ Colchón de Seguridad: **${colchon:,.0f}**")
-        st.progress(colchon / remanente if remanente > 0 else 0)
-
-    st.markdown("### Resumen de Movimientos")
-    datos = {
-        "Categoría": ["Ingreso", "Fijos", "Obligaciones Variables", "Abono Fer", "Abono Jheferson", "Colchón Emergencia"],
-        "Monto": [salario, -total_fijos, -total_variables, -abono_fer, -abono_jheferson, colchon]
+# --- CSS PERSONALIZADO PARA MODO OSCURO Y ESTILOS ---
+st.markdown("""
+    <style>
+    /* Ocultar elementos predeterminados de Streamlit para aspecto de Web App */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    /* Estilo para las tarjetas de resumen */
+    div[data-testid="metric-container"] {
+        background-color: #1e1e1e;
+        border-radius: 10px;
+        padding: 15px;
+        border: 1px solid #333;
     }
-    df = pd.DataFrame(datos)
-    st.dataframe(df.style.format({"Monto": "${:,.0f}"}), use_container_width=True)
-    
-    st.markdown("---")
-    if st.button("Guardar en Google Sheets (Mensual)"):
-        try:
-            conn = st.connection("gsheets", type=GSheetsConnection)
-            df_existente = conn.read(worksheet="Hoja 1")
-            nuevo_registro = pd.DataFrame([{
-                "Fecha": datetime.now().strftime("%Y-%m-%d"),
-                "Salario": salario,
-                "Gastos Fijos": total_fijos,
-                "Gastos Variables": total_variables,
-                "Abono Fer": abono_fer,
-                "Abono Jheferson": abono_jheferson,
-                "Colchón": colchon
-            }])
-            df_actualizado = pd.concat([df_existente, nuevo_registro], ignore_index=True).dropna(how="all")
-            conn.update(worksheet="Hoja 1", data=df_actualizado)
-            st.success("¡Registro mensual guardado exitosamente!")
-        except Exception as e:
-            st.error(f"Error: {e}")
+    </style>
+""", unsafe_allow_html=True)
+
+# --- MENÚ LATERAL (Replicando la imagen) ---
+with st.sidebar:
+    st.markdown("### 🎯 Mi Presupuesto")
+    seleccion = option_menu(
+        menu_title=None,
+        options=["Vista General", "Transacciones", "Cuentas", "Deudas", "Objetivos", "Gráficos"],
+        icons=["grid", "list-check", "bank", "credit-card", "bullseye", "bar-chart"],
+        menu_icon="cast",
+        default_index=0,
+        styles={
+            "container": {"padding": "0!important", "background-color": "transparent"},
+            "icon": {"color": "#4fc3f7", "font-size": "18px"}, 
+            "nav-link": {"font-size": "15px", "text-align": "left", "margin":"0px", "--hover-color": "#333"},
+            "nav-link-selected": {"background-color": "#1976d2"},
+        }
+    )
 
 # ==========================================
-# PESTAÑA 2: GASTOS DIARIOS
+# VISTA GENERAL (DASHBOARD principal)
 # ==========================================
-with tab2:
-    st.markdown("### 🛒 Registrar un Gasto Nuevo")
-    st.write("Agrega aquí tus compras del día a día. Se guardarán en la pestaña 'Gastos Diarios' de tu Google Sheet.")
+if seleccion == "Vista General":
     
-    # st.form envuelve los inputs para que no se recargue la app hasta que presiones el botón
-    with st.form("form_gastos", clear_on_submit=True):
-        f_fecha = st.date_input("Fecha de compra", datetime.now())
-        f_concepto = st.text_input("¿Qué compraste? (Ej. Almuerzo UdeA)")
-        f_categoria = st.selectbox("Categoría", ["Mercado/Comida", "Pasajes/Transporte", "Universidad", "Deudas", "Otros"])
-        f_monto = st.number_input("Valor ($)", min_value=0, step=1000)
+    # Fila 1: Resumen y Gráficos de Anillo
+    col_resumen, col_mes_actual, col_mes_pasado = st.columns([1.5, 1, 1])
+    
+    with col_resumen:
+        st.markdown("#### Resumen")
+        # Datos simulados basados en tu contexto para mostrar la UI
+        st.metric("Balance Total (Liquidez)", "$1.071.000 COP")
+        st.metric("Deudas Pendientes", "-$2.964.602 COP", delta_color="inverse")
+        st.metric("Salario Domo (Proyectado)", "$2.740.238 COP")
+
+    with col_mes_actual:
+        st.markdown("<p style='text-align: center;'>Este mes</p>", unsafe_allow_html=True)
+        # Gráfico de anillo tipo Fast Budget
+        fig_actual = go.Figure(data=[go.Pie(labels=['Ingresos', 'Gastos'], values=[2740238, 1669238], hole=.7, 
+                                            marker_colors=['#43a047', '#e53935'])])
+        fig_actual.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0), 
+                                 paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=150)
+        st.plotly_chart(fig_actual, use_container_width=True)
         
-        submit_btn = st.form_submit_button("Guardar Gasto")
+    with col_mes_pasado:
+        st.markdown("<p style='text-align: center;'>Mes pasado</p>", unsafe_allow_html=True)
+        fig_pasado = go.Figure(data=[go.Pie(labels=['Ingresos', 'Gastos'], values=[2740238, 2000000], hole=.7, 
+                                            marker_colors=['#43a047', '#e53935'])])
+        fig_pasado.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0), 
+                                 paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=150)
+        st.plotly_chart(fig_pasado, use_container_width=True)
+
+    st.markdown("---")
+    
+    # Fila 2: Cuentas y Gráfico de Líneas de Balance
+    col_cuentas, col_grafico_balance = st.columns([1, 2])
+    
+    with col_cuentas:
+        st.markdown("#### Cuentas")
+        st.markdown("**Efectivo / Cartera** <br> <span style='color:#e53935'>-$354.600 COP</span>", unsafe_allow_html=True)
+        st.markdown("**Cuenta Bancaria** <br> <span style='color:#43a047'>$1.425.600 COP</span>", unsafe_allow_html=True)
+        st.markdown("<br>#### Próximos Pagos", unsafe_allow_html=True)
+        st.markdown("🔴 **Cuota Papá:** $82.750")
+        st.markdown("🔴 **UdeA (Quincena):** $25.000")
+
+    with col_grafico_balance:
+        st.markdown("#### Evolución del Balance")
+        # Generar datos dummy de los últimos días simulando acumulación de liquidez
+        fechas = [datetime.today() - timedelta(days=x) for x in range(10, 0, -1)]
+        balances = [500000, 480000, 450000, 1800000, 1750000, 1700000, 1680000, 1500000, 1200000, 1071000]
         
-        if submit_btn:
-            try:
-                conn = st.connection("gsheets", type=GSheetsConnection)
-                df_diarios = conn.read(worksheet="Gastos Diarios")
-                
-                nuevo_gasto = pd.DataFrame([{
-                    "Fecha": f_fecha.strftime("%Y-%m-%d"),
-                    "Concepto": f_concepto,
-                    "Categoría": f_categoria,
-                    "Monto": f_monto
-                }])
-                
-                df_actual = pd.concat([df_diarios, nuevo_gasto], ignore_index=True).dropna(how="all")
-                conn.update(worksheet="Gastos Diarios", data=df_actual)
-                st.success(f"✅ Gasto de ${f_monto:,.0f} guardado correctamente.")
-            except Exception as e:
-                st.error(f"Error al guardar: Asegúrate de tener una hoja llamada 'Gastos Diarios' en tu Excel. Detalle: {e}")
+        fig_linea = px.area(x=fechas, y=balances, color_discrete_sequence=['#1976d2'])
+        fig_linea.update_layout(margin=dict(t=10, b=10, l=10, r=10), paper_bgcolor='rgba(0,0,0,0)', 
+                                plot_bgcolor='rgba(0,0,0,0)', xaxis_title="", yaxis_title="COP $", height=250)
+        fig_linea.update_xaxes(showgrid=False)
+        fig_linea.update_yaxes(showgrid=True, gridwidth=1, gridcolor='#333')
+        st.plotly_chart(fig_linea, use_container_width=True)
+
+    st.markdown("---")
+    
+    # Fila 3: Barras de últimos 7 días y Presupuestos (Progreso)
+    col_barras, col_presupuestos = st.columns([2, 1])
+    
+    with col_barras:
+        st.markdown("#### Últimos 7 días")
+        dias = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+        ingresos_d = [0, 0, 0, 1370119, 0, 0, 0] # Simulando pago quincenal
+        gastos_d = [18860, 18860, 50000, 18860, 600000, 0, 0] # Pasajes diarios (4715x4) y mercado
+        
+        fig_barras = go.Figure()
+        fig_barras.add_trace(go.Bar(x=dias, y=gastos_d, name='Gastos', marker_color='#e53935'))
+        fig_barras.add_trace(go.Bar(x=dias, y=ingresos_d, name='Ingresos', marker_color='#43a047'))
+        fig_barras.update_layout(barmode='group', margin=dict(t=10, b=10, l=10, r=10), 
+                                 paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=250,
+                                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        st.plotly_chart(fig_barras, use_container_width=True)
+
+    with col_presupuestos:
+        st.markdown("#### Presupuestos")
+        
+        st.markdown("<small>Mercado mensual (Ejecutado: 60%)</small>", unsafe_allow_html=True)
+        st.progress(0.60)
+        st.markdown("<div style='text-align: right; font-size: 12px'>360.000 / 600.000 COP</div>", unsafe_allow_html=True)
+        
+        st.markdown("<small>Pasajes (Ejecutado: 25%)</small>", unsafe_allow_html=True)
+        st.progress(0.25)
+        st.markdown("<div style='text-align: right; font-size: 12px'>62.500 / 250.000 COP</div>", unsafe_allow_html=True)
+        
+        st.markdown("<small>UdeA (Ejecutado: 100%)</small>", unsafe_allow_html=True)
+        st.progress(1.0)
+        st.markdown("<div style='text-align: right; font-size: 12px'>50.000 / 50.000 COP</div>", unsafe_allow_html=True)
+
+# ==========================================
+# PESTAÑA: TRANSACCIONES (Para el registro diario)
+# ==========================================
+elif seleccion == "Transacciones":
+    st.header("📝 Registro de Gastos")
+    # Aquí puedes mover el formulario st.form que tenías en la versión anterior para guardar en Google Sheets.
+    st.info("Aquí integraremos la conexión a Google Sheets para que los gastos alimenten los gráficos de la Vista General.")
